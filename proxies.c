@@ -1,3 +1,12 @@
+
+#define PROXIES_ROOTS_N 512
+#define PROXIES_ROOTS_BITS 9
+#define PROXIES_ROOTS_MASK 0b111111111ULL
+
+static uint  proxiesN;
+static u16   proxiesRoots[PROXIES_ROOTS_N];
+static Proxy proxies[PROXIES_N];
+
 static int xweb_proxy_cmp (const u16* const a, const u16* const b) {
     return (int)proxiesSortPoints[*a] -
            (int)proxiesSortPoints[*b];
