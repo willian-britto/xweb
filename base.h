@@ -105,3 +105,16 @@ union SockAddr {
     SockAddrIP4 ip4;
     SockAddrIP6 ip6;
 };
+
+
+#define _IP6_ARGS(a) ((u8*)(a))[0], ((u8*)(a))[1], ((u8*)(a))[2], ((u8*)(a))[3], ((u8*)(a))[4], ((u8*)(a))[5], ((u8*)(a))[6], ((u8*)(a))[7], ((u8*)(a))[8], ((u8*)(a))[9], ((u8*)(a))[10], ((u8*)(a))[11], ((u8*)(a))[12], ((u8*)(a))[13], ((u8*)(a))[14], ((u8*)(a))[15]
+#define _IP4_ARGS(a) ((u8*)(a))[0], ((u8*)(a))[1], ((u8*)(a))[2], ((u8*)(a))[3]
+
+#define IP6_ADDR_(p0, a0, p1, a1, p2, a2, p3, a3, p4, a4, p5, a5, p6, a6, p7, a7, p8, a8, p9, a9, pA, aA, pB, aB, pC, aC, pD, aD, pE, aE, pF, aF) \
+    { p0 ## a0, p1 ## a1, p2 ## a2, p3 ## a3, p4 ## a4, p5 ## a5, p6 ## a6, p7 ## a7, p8 ## a8, p9 ## a9, pA ## aA, pB ## aB, pC ## aC, pD ## aD, pE ## aE, pF ## aF }
+
+#define IP6_ADDR(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, aA, aB, aC, aD, aE, aF) \
+    IP6_ADDR_(0x, a0, 0x, a1, 0x, a2, 0x, a3, 0x, a4, 0x, a5, 0x, a6, 0x, a7, 0x, a8, 0x, a9, 0x, aA, 0x, aB, 0x, aC, 0x, aD, 0x, aE, 0x, aF)
+
+#define IP4(a, b, c, d) (((uint)(d) << 24) | ((uint)(c) << 16) | ((uint)(b) << 8) | ((uint)a))
+
