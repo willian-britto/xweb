@@ -48,3 +48,22 @@ void xweb_proxy_add (const char* const ip_, const uint port, const uint protocol
             xweb_proxy_add(ip, port, protocol);
     }
 }
+
+void xweb_proxies_init (void) {
+    
+    // PROXIES
+    proxiesN = 0;
+
+    foreach (i, PROXIES_ROOTS_N)
+        proxiesRoots[i] = PROXY_NONE;
+
+    foreach (i, PROXIES_N) {
+        proxies[i].ip        = 0;
+        proxies[i].port      = 0;
+        proxies[i].protocol  = 0;
+        proxies[i].childs[0] = PROXY_NONE;
+        proxies[i].childs[1] = PROXY_NONE;
+        proxies[i].childs[2] = PROXY_NONE;
+        proxies[i].childs[3] = PROXY_NONE;
+    }
+}
