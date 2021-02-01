@@ -20,44 +20,11 @@
 
 #define fatal(fmt, ...) ({ fprintf(stderr, "FATAL: " fmt "\n", ##__VA_ARGS__); fflush(stderr); abort(); })
 
-//#define XWEB_WEBSOCKET_MASK 0xE1E1E1E1E1E1E1E1ULL
-#define XWEB_WEBSOCKET_MASK 0ULL
-
-#define WS_MSG_SIZE_MAX (128*1024*1024)
-
 #define MS_MAX (32ULL*24*64*64*1024ULL)
 
-typedef struct IOSubmission IOSubmission;
-typedef struct Site Site;
-typedef struct Class Class;
-typedef struct Thread Thread;
 typedef struct Pool Pool;
 typedef struct StaticProxy StaticProxy;
 typedef struct Proxy Proxy;
-typedef struct DNSAnswer DNSAnswer;
-typedef struct Host Host;
-typedef struct HostServer HostServer;
-typedef struct HostCert HostCert;
-typedef struct HostDep HostDep;
-typedef struct Conn Conn;
-typedef struct In In;
-typedef struct Out Out;
-
-struct Class {
-    Class* next;
-    Class* parentNext; // PRÓXIMA CHILD DO PARENT
-    Class* siteNext; // PRÓXIMA CLASSE DO MESMO SITE
-    Class* parent;
-    Class* childs;
-    Site* site; // CLASSE ROOT DESTA CLASSE
-    Thread* threads; // INSTANCIAS DESTA CLASSE
-    u32 n;
-    u32 nMax;
-    u16 nameSize;
-    u16 reserved;
-    u32 reserved2;
-    char name[];
-};
 
 #define POOL_CHILDS_N 8
 #define POOL_CHILDS_MASK 0b111ULL
@@ -79,43 +46,6 @@ struct Pool {
 #define SESSION_POOLS_ROOTS_MASK 0b111111ULL
 #define SESSION_POOLS_ROOTS_BITS 6
 
-struct Thread {
-    Thread* next;
-    Thread* parent;
-    Thread* parentNext;
-    Class* class; // CLASSE DA QUAL ELA É INSTÂNCIA
-    Thread* classNext;
-    Site* site; // SITE DA QUAL ELA É INSTÂNCIA
-    Thread* childs;
-    PyObject* obj;
-    PyByteArrayObject* msg;
-    Pool** pools; // [SESSION_POOLS_ROOTS_N]  OPEN FREE HTTP CONNECTIONS
-    void* userAgent; // TODO: FIXME:
-    void* cookies;
-    u64 started;
-    u64 timeout;
-    u32 id;
-    u16 nameSize;
-    u16 reserved;
-    Pool* pool;
-    Conn* conn;
-    Conn* streamConn; // PARA LEMBRAR ENQUANTO FAZ UMA REQUEST
-    // u8 retry; // REMAINING RETRIES
-    char name[];
-};
-
-struct Site {
-    Site* next;
-    Class* class; // CLASSE ROOT, A QUAL GEROU ESTE SITE
-    Class* classes; // TODAS AS CLASSES DESTE SITE, INCLUINDO FILHAS DAS FILHAS ETC
-    u16 ip4Next;
-    u16 ip6Next;
-    u16 proxiesCount;
-    u16 proxiesNext;
-    u8  proxiesPoints[PROXIES_N];
-    u16 proxies[PROXIES_N];
-};
-
 #define IN_SIZE_MAX (64*1024*1024)
 
 static u64 now0;
@@ -134,9 +64,6 @@ static Thread* threads;
 static Site* site;
 static Class* class;
 static Thread* thread;
-
-static uint connsN;
-static Conn* conns;
 
 #define USER_AGENTS_N 4
 
