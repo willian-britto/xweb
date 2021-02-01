@@ -1,3 +1,7 @@
+typedef struct Conn Conn;
+typedef struct In In;
+typedef struct Out Out;
+
 // TODO: FIXME: ALOCAR SEMPRE COM 8 BYTES A MAIS, E NAO DEIXAR DAR READ() NELES
 // APOS DAR O RECEIVE, COLOCAR UM \0\r\n\r\n\0\1 APÓS
 // ISTO FICARÁ ONDE FICA O LMT; pos > lmt -> overflow
