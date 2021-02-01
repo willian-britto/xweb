@@ -1,7 +1,13 @@
+typedef struct StaticProxy StaticProxy;
+typedef struct Proxy Proxy;
 
 #define PROXIES_ROOTS_N 512
 #define PROXIES_ROOTS_BITS 9
 #define PROXIES_ROOTS_MASK 0b111111111ULL
+
+static const StaticProxy proxiesStatic[] = { XWEB_PROXIES_STATIC };
+
+static u8* proxiesSortPoints;
 
 static uint  proxiesN;
 static u16   proxiesRoots[PROXIES_ROOTS_N];
