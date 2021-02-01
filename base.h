@@ -118,3 +118,14 @@ union SockAddr {
 
 #define IP4(a, b, c, d) (((uint)(d) << 24) | ((uint)(c) << 16) | ((uint)(b) << 8) | ((uint)a))
 
+#define clear(addr, size) memset(addr, 0, size)
+#define clear1(addr, size) memset(addr, 0xFF, size)
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+#endif
+
