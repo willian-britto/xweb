@@ -1,3 +1,8 @@
+typedef struct Host Host;
+typedef struct HostServer HostServer;
+typedef struct HostCert HostCert;
+typedef struct HostDep HostDep;
+
 struct HostDep {
     HostDep** aPtr;
     HostDep** bPtr;
