@@ -282,3 +282,11 @@ static void xweb_host_names_add (Host* const restrict host, const char* restrict
 
     // QUANDO FOR RESOLVER UM HOST, TEM QUE MANDAR RESOLVER TODAS AS SUAS DEPENDENCIAS, E DE FORMA RECURSIVA
 }
+
+void xweb_hosts_init (void) {
+    
+    hostsN = 0;
+
+    clear(hosts, sizeof(hosts));
+    clear1(hostsRoots, sizeof(hostsRoots));
+}
