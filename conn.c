@@ -814,3 +814,9 @@ static void xweb_poll_conns_res (void) {
         }
     }
 }
+
+void xweb_conns_init (void) {
+
+    connsN = 0;
+    conns = NULL;
+}
