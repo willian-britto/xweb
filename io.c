@@ -30,6 +30,31 @@ static u64 uSubmissionsEnd;
 static uint uConsumePending;
 static uint uConsumeHead;
 
+// AO TENTAR CANCELAR ALGO:
+//primeiro procurar ele na lista dos queueds
+    // se o sslInRes || sslOutRes for IO_WAIT
+        // cancelar todos os queueds pelo FD
+    //cancela o &conn->sslInRes
+    //cancela o &conn->sslOutRes
+//se não achar, aí sim cancela no io_uring
+
+void xweb_io_submit (u32* const data, const uint opcode, const uint fd, const u64 addr, const u64 off, const uint len) {
+
+    uSubmissions[uSubmissionsEnd].data   = (u64)data;
+    uSubmissions[uSubmissionsEnd].opcode = opcode;
+    uSubmissions[uSubmissionsEnd].fd     = fd;
+    uSubmissions[uSubmissionsEnd].addr   = addr;
+    uSubmissions[uSubmissionsEnd].off    = off;
+    uSubmissions[uSubmissionsEnd].len    = len;
+
+    // TODO: FIXME: SETAR O ->result como IO_WAIT SOMENTE QUANDO ELE FOR SUBMETIDO?
+    //ou entao o if()else e so colocar no enqueued quando lotar o principal
+
+    //se tiverr algo enqueued ou nao couber mais->enqueuea
+
+    uSubmissionsEnd++;
+}
+
 void xweb_io_init2 (void) {
   
     if (mmap(IOU_S_SQES, IOU_S_SQES_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, IOU_FD, IORING_OFF_SQES) != IOU_S_SQES)
