@@ -2,14 +2,6 @@
 
 */
 
-#if DNS_RESOLVE_RETRY_INTERVAL_MIN >= DNS_RESOLVE_RETRY_INTERVAL_MAX
-#error
-#endif
-
-#if DNS_RESOLVE_SUCCESS_INTERVAL_MIN >= DNS_RESOLVE_SUCCESS_INTERVAL_MAX
-#error
-#endif
-
 #if XWEB_DEBUG
 #define dbg(fmt, ...) ({ fprintf(stderr, "DEBUG: " fmt "\n", ##__VA_ARGS__); fflush(stderr); })
 #else
@@ -126,13 +118,6 @@ struct Site {
 
 #define IN_SIZE_MAX (64*1024*1024)
 
-#if XWEB_TEST
-static volatile sig_atomic_t sigINT;
-#endif
-static volatile sig_atomic_t sigTERM;
-static volatile sig_atomic_t sigUSR1;
-static volatile sig_atomic_t sigUSR2;
-
 static u64 now0;
 static u64 now;
 
@@ -221,25 +206,6 @@ static u64 xweb_now_update (void) {
     now = 3*MS_MAX + (u64)now_.tv_sec * 1000 + (u64)now_.tv_nsec / 1000000;
 
     return now;
-}
-
-static void xweb_signal_handler (int signal) {
-
-    switch (signal) {
-        case SIGUSR1:
-            sigUSR1 = 1;
-            break;
-        case SIGUSR2:
-            sigUSR2 = 1;
-            break;
-#if XWEB_TEST
-        case SIGINT:
-            sigINT = 1;
-            break;
-#endif
-        default: // SIGTERM / SIGINT
-            sigTERM = 1;
-    }
 }
 
 static void xweb_poll_io (void) {
