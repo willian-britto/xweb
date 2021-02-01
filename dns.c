@@ -35,3 +35,20 @@ static int dnsSockets[DNS_SERVERS_N];
 static uint dnsAnswersReadyN;
 static u16 dnsAnswersReady[DNS_ANSWERS_N];
 static DNSAnswer dnsAnswers[DNS_ANSWERS_N];
+
+void xweb_dns_init (void) {
+   
+    // DNS
+    dnsAnswersReadyN = 0;
+
+    foreach (i, DNS_SERVERS_N) {
+        const int sock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP);
+        if (sock <= 0)
+            fatal("FAILED TO OPEN DNS SOCKET");
+        if (bind(sock, (SockAddrAny*)&dnsBindAddr, sizeof(SockAddrIP4)))
+            fatal("FAILED TO BIND DNS SOCKET");
+        if (connect(sock, (SockAddrAny*)&dnsServers[i], sizeof(SockAddrIP4)))
+            fatal("FAILED TO CONNECT DNS SOCKET");
+        dnsSockets[i] = sock;
+    }
+}
