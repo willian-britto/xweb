@@ -155,17 +155,6 @@ static inline void* PY_TO_PTR_NULL (PyObject* const obj) {
 
 #define fatal(fmt, ...) ({ fprintf(stderr, "FATAL: " fmt "\n", ##__VA_ARGS__); fflush(stderr); abort(); })
 
-#define clear(addr, size) memset(addr, 0, size)
-#define clear1(addr, size) memset(addr, 0xFF, size)
-
-#ifndef TRUE
-#define TRUE 1
-#endif
-
-#ifndef FALSE
-#define FALSE 0
-#endif
-
 //#define XWEB_WEBSOCKET_MASK 0xE1E1E1E1E1E1E1E1ULL
 #define XWEB_WEBSOCKET_MASK 0ULL
 
@@ -188,42 +177,6 @@ typedef struct HostDep HostDep;
 typedef struct Conn Conn;
 typedef struct In In;
 typedef struct Out Out;
-
-struct IOSubmission {
-    u64 data;
-    u64 addr;
-    u64 off;
-    u16 opcode;
-    u16 fd;
-    u32 len;
-};
-
-#define PROXY_NONE 0xFFFF
-#define PROXIES_N 65536
-
-#define PROXY_POINTS_MAX   255U
-#define PROXY_POINTS_ZERO  127U
-
-struct StaticProxy {
-    u32 ip;
-    u16 port;
-    u16 protocol;
-};
-
-#define PROXIES_CHILDS_N    4
-#define PROXIES_CHILDS_BITS 2
-#define PROXIES_CHILDS_MASK 0b11ULL
-
-#define PROXIES_FIRSTS_N 1024 //
-
-// AO DAR UM FREE NO PROXY, SE ELE AINDA ESTIVER EM USO, APENAS O RETIRE DO HASH TABLE
-// NO CONNECTION_CLOSE(), SE O REF COUNT DER 0, AÍ SIM TERMINAR, LIMPANDO OS POINTS DE TODAS AS CLASSES, E O COLOQUE NUMA LINKED LIST
-struct Proxy {
-    u32 ip;
-    u16 port;
-    u16 protocol;
-    u16 childs[PROXIES_CHILDS_N];
-}; // TODO: FIXME: FAZER POR SITE, LIMITADO A 32.000, E NUNCA SOBRESCREVER OS QUE TIVER < 0xFF/2
 
 struct Class {
     Class* next;
@@ -298,159 +251,6 @@ struct Site {
     u16 proxies[PROXIES_N];
 };
 
-struct HostDep {
-    HostDep** aPtr;
-    HostDep** bPtr;
-    HostDep* aNext;
-    HostDep* bNext;
-    Host* a;
-    Host* b;
-    u64 expires; // TODO: FIXME: EXPIRAR ISSO
-};
-
-#define HOST_CERTIFICATE_PROXIES_N 5 // TEM QUE SER BASTANTE, PARA O CASO DE MUITOS PROXIES ATACAREM JUNTOS
-
-struct HostCert {
-    u64 proxiesNeed:8;
-    u64 reserved:56;
-    u64 hash[4];
-    u64 proxies[HOST_CERTIFICATE_PROXIES_N];
-};
-
-#define HOST_CERTIFICATES_N 8 // TEM QUE TER BASTANTE, PARA O CASO DE MUITOS PROXIES TENTAREM NOS ATACAR
-#define HOST_NAME_SIZE_MAX 127
-#define HOST_IPS_N 64
-
-#define DNS_SERVERS_N 5
-
-struct Host {
-    u64 hash;
-    u16 childs[4];
-    HostDep* a;
-    HostDep* b;
-    u64 v6; // BIT MASK INDICATING WHICH IPS ARE V6
-    u16 id; // DNS TRANSACTION ID
-    u8 nameSize; // SEM CONSIDERAR O \0
-    u8 pktSize;
-    u8 ip; // ITERATOR - LAST USED
-    u8 ipsNew;
-    u8 ipsN;
-    u8 certsCtr; // na verdade é um counter, usar um %
-    u64 lasts[DNS_SERVERS_N][2]; // LAST TIME SENT
-    u64 agains[DNS_SERVERS_N][2]; // WHEN TO SEND AGAIN
-    HostCert certs[HOST_CERTIFICATES_N];
-    char name[HOST_NAME_SIZE_MAX + 1]; // POSSUI O \0
-    u8 ips[HOST_IPS_N][16];
-    u8 pkts[2][256]; // THE ONE TO BE SENT
-};
-
-// TODO: FIXME: ALOCAR SEMPRE COM 8 BYTES A MAIS, E NAO DEIXAR DAR READ() NELES
-// APOS DAR O RECEIVE, COLOCAR UM \0\r\n\r\n\0\1 APÓS
-// ISTO FICARÁ ONDE FICA O LMT; pos > lmt -> overflow
-struct In { // PODERÁ SIMPLESMENTE SER TRANSFORMADO EM UM MSG, SE NÃO FOR SSL, OU DECODIFICAR NO SSL DENTRO DELE MESMO
-    In* next; // ENQUANTO ESTIVER NO INBUFF, NAO PRCEISA PREENCHER NADA DISSO?
-    void* start;
-    void* end;
-    void* lmt; // AS ALLOCATED
-    char buff[]; // DEVERÁ COMEÇAR A RECEBER APÓS UM ESPAÇO PARA UM HEADER
-}; // TODO: FIXME: FICAR DE OLHO PAR QUE NUNCA CHEGUE A < in->buff
-
-#define OUT_TYPE_SIZED   0 // BUFF IS ALREADY AFTER IT, ALLOCED WITH THE STRUCTURE
-#define OUT_TYPE_STATIC  1 // BUFF IS A POINTER TO STATIC
-#define OUT_TYPE_DYNAMIC 2 // BUFF IS A POINTER TO DYNAMIC (MUST FREE)
-#define OUT_TYPE_PYTHON  3 // BUFF IS A POINTER TO A PYTHON OBJECT (MUST DEREFERENCE)
-
-struct Out {
-    Out* next;
-    u32 type;
-    u32 size;
-    void* start;
-    char buff[];
-};
-
-// TODO: FIXME: ENFORCE CONNS_MAX POR CAUSA DO FD
-// ao chegar em certo limite, aguarda no pool
-//      se nao tiver conexoes suficientes, deixa para criar ela depois
-
-#define CONN_POLL_CLOSE            0
-#define CONN_POLL_CLOSING          1
-#define CONN_POLL_RESOLVE          2
-#define CONN_POLL_CONNECT          3 // DAQUI PARA CIMA, O conn->sslInRes == 0 NAO TEM EFEITO; OS DEMAIS CONSIDERAM QUE FOI ALGO RECEBIDO
-#define CONN_POLL_PROXY_WAIT       4
-#define CONN_POLL_SSL              5
-#define CONN_POLL_SSL_CONNECT      6
-#define CONN_POLL_POOL             8
-#define CONN_POLL_FLUSH            9
-#define CONN_POLL_STOP            10
-
-#define CONN_MSG_TYPE_WS_NONE  0
-#define CONN_MSG_TYPE_WS_BIN   0x82
-#define CONN_MSG_TYPE_WS_STR   0x81
-#define CONN_MSG_TYPE_WS_PING  0x89
-#define CONN_MSG_TYPE_WS_PONG  0x0A
-#define CONN_MSG_TYPE_WS_CLOSE 0x88
-
-#define CONN_SSL_USE ((WOLFSSL*)1ULL)
-
-// TODO: FIXME: BUFFER SIZE DINAMICO POR BANDWIDTH, COM UM MINIMAL?
-// NOTE: conn->threads É NECESSÁRIO PARA QUE A REQUEST JÁ LIBERE A CONEXÃO PARA SER REUSADA, MAS DEIXAR A THREAD SE REFERIR A ELA E À SEU PROXY
-struct Conn {
-    Conn** ptr; // IN THE ACTIVES LIST
-    Conn* next;
-    Pool* pool;
-    Conn** poolPtr;
-    Conn* poolNext; // IN THE HTTP FREE CONNECTIONS
-    u64 again; // QUANDO TENTAR CONECTAR DE NOVO
-    u8 proxyTries_;
-    u8 proxyTries;
-    u8 try:5;
-    u8 v6:3;
-    u8 poll;
-    u16 proxy;
-    u16 fd;
-    u64 timeout; // DA OPERAÇÃO ATUAL SENDO FEITA: CONECTANDO, HANDSHAKING, RECEBENDO HEADER, RECEBENDO QUALQUER MENSAGEM/PING
-    u64 msgEnded; // QUANDO QUE COMPLETOU A ÚLTIMA MENSAGEM, A FIM DE TIMEOUT EM CONEXÕES LENTAS/TRAVADAS
-    u64 msgStarted; // QUANDO QUE COMEÇOU A RECEBER ESTA MENSAGEM
-    u8 msgType;
-    u8 msgSkip; // ESTES N BYTES NO IN NÃO FAZEM PARTE DA MENSAGEM
-    u16 msgWait; // SÓ PROCESSAR NOVAMENTE APÓS RECEBER N BYTES
-    u32 msgMore;
-    u32 msgEnd; // ONDE ESTÁ NO MOMENTO
-    char* tmpEnd;
-    In* in;
-    In* in_;
-    u64 inTime;
-    Out* out;
-    Out* out_;
-    u64 outTime;
-    void* sslIn;
-    void* sslInStart;
-    u64 sslInTime;
-    u32 sslInRes;
-    u32 sslOutRes;
-    Out* sslOut;
-    Out* sslOut_;
-    u64 sslOutTime;
-    WOLFSSL* ssl;
-    union {
-        struct {
-            u8 ip[16];
-            union {
-                SockAddrAny sAddr;
-                SockAddrIP4 sAddr4;
-                SockAddrIP6 sAddr6;
-            };
-            union {
-                SockAddrAny dAddr;
-                SockAddrIP4 dAddr4;
-                SockAddrIP6 dAddr6;
-            };
-        };
-        IOV sslOutIOVs[1024];
-    };
-    char tmp[1024];
-};
-
 #define IN_SIZE_MAX (64*1024*1024)
 
 #if XWEB_TEST
@@ -462,37 +262,6 @@ static volatile sig_atomic_t sigUSR2;
 
 static u64 now0;
 static u64 now;
-
-static IOSubmission uSubmissions[65536];
-static uint uSubmissionsNew;
-static u64 uSubmissionsStart;
-static u64 uSubmissionsEnd;
-static uint uConsumePending;
-static uint uConsumeHead;
-
-#define IOU_FD 3
-
-#define IOU_S_SQES ((IOURingSQE*)0x0002E00000000ULL)
-#define IOU_S_SQES_SIZE 1048576
-
-#define IOU_BASE ((void*)0x0002F00000000ULL)
-#define IOU_BASE_SIZE 590144
-
-#define IOU_S_HEAD    ((uint*)0x0000002F00000000ULL)
-#define IOU_S_TAIL    ((uint*)0x0000002F00000040ULL)
-#define IOU_S_MASK    ((uint*)0x0000002F00000100ULL)
-#define IOU_S_ENTRIES ((uint*)0x0000002F00000108ULL)
-#define IOU_S_FLAGS   ((uint*)0x0000002F00000114ULL)
-#define IOU_S_ARRAY   ((uint*)0x0000002F00080140ULL)
-
-#define IOU_C_HEAD    ((uint*)0x0000002F00000080ULL)
-#define IOU_C_TAIL    ((uint*)0x0000002F000000C0ULL)
-#define IOU_C_MASK    ((uint*)0x0000002F00000104ULL)
-#define IOU_C_ENTRIES ((uint*)0x0000002F0000010CULL)
-#define IOU_C_CQES    ((IOURingCQE*)0x0000002F00000140ULL)
-
-#define IOU_S_MASK_CONST 0x3FFFU
-#define IOU_C_MASK_CONST 0x7FFFU
 
 static PyObject* Err;
 static PyObject* ErrClosed;
@@ -2817,21 +2586,7 @@ static PyObject* xweb_PY_init1 (const u64 id) {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &termios);
 #endif
 
-    if (mmap(IOU_S_SQES, IOU_S_SQES_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, IOU_FD, IORING_OFF_SQES) != IOU_S_SQES)
-        fatal("FAILED TO MAP IOU_S_SQES");
-
-    if (mmap(IOU_BASE, IOU_BASE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, IOU_FD, IORING_OFF_SQ_RING) != IOU_BASE)
-        fatal("FAILED TO MAP IOU_BASE");
-
-    dbg("#define IOU_S_MASK_CONST 0x%llXU", (uintll)*IOU_S_MASK);
-    dbg("#define IOU_C_MASK_CONST 0x%llXU", (uintll)*IOU_C_MASK);
-
-    ASSERT(IOU_S_MASK_CONST == *IOU_S_MASK);
-    ASSERT(IOU_C_MASK_CONST == *IOU_C_MASK);
-
-    uConsumeHead = *IOU_C_HEAD;
-
-    read_barrier();
+    xweb_io_init2();
 
     // DNS
     // TODOS DEVEM SER SUBMETIDOS
@@ -2952,115 +2707,15 @@ static struct PyModuleDef xwebModule = {
 
 PyMODINIT_FUNC PyInit_xweb (void) {
 
-    logBuffer = malloc(LOG_BUFFER_SIZE);
-    logBufferReady = malloc(LOG_BUFFER_SIZE);
-    logBufferFlushing = NULL;
-    logEnd = logBuffer;
-    logFree = LOG_BUFFER_SIZE;
+    xweb_log_init();
 
     // TIME
     now0 = xweb_now_update();
 
-    // IO_URING
-    IOURingParams params; memset(&params, 0, sizeof(params));
-
-    const int fd = io_uring_setup(16384, &params);
-
-    if (fd <= 0)
-        fatal("FAILED TO OPEN IO_URING");
-
-    if (params.sq_entries != 16384)
-        fatal("TOO FEW SQ ENTRIES");
-
-    uSubmissionsNew = 0;
-    uSubmissionsStart = 0;
-    uSubmissionsEnd = 0;
-
-    uConsumePending = 0;
-
-    // ASSUMING (params.features & IORING_FEAT_SINGLE_MMAP)
-    uint sSize = params.sq_off.array + params.sq_entries * sizeof(uint);
-    uint cSize = params.cq_off.cqes  + params.cq_entries * sizeof(IOURingCQE);
-
-    if (sSize < cSize)
-        sSize = cSize;
-
-    dbg("IO_URING FD %d", fd);
-
-    dbg("params.sq_entries = %llu", (uintll)params.sq_entries);
-
-    dbg("#define IOU_BASE_SIZE %u", sSize);
-
-    dbg("#define IOU_S_SQES_SIZE %llu", (uintll)params.sq_entries * sizeof(IOURingSQE));
-
-    dbg("#define IOU_S_HEAD    ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.sq_off.head));
-    dbg("#define IOU_S_TAIL    ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.sq_off.tail));
-    dbg("#define IOU_S_MASK    ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.sq_off.ring_mask));
-    dbg("#define IOU_S_ENTRIES ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.sq_off.ring_entries));
-    dbg("#define IOU_S_FLAGS   ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.sq_off.flags));
-    dbg("#define IOU_S_ARRAY   ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.sq_off.array));
-
-    dbg("#define IOU_C_HEAD    ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.cq_off.head));
-    dbg("#define IOU_C_TAIL    ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.cq_off.tail));
-    dbg("#define IOU_C_MASK    ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.cq_off.ring_mask));
-    dbg("#define IOU_C_ENTRIES ((uint*)0x%016llXULL)", (uintll)(IOU_BASE + params.cq_off.ring_entries));
-    dbg("#define IOU_C_CQES    ((IOURingCQE*)0x%016llXULL)", (uintll)(IOU_BASE + params.cq_off.cqes));
-
-    ASSERT(fd == IOU_FD);
-
-    // CONNS_N*(in e out) + DNS PACKETS + 1024
-    ASSERT(params.sq_entries == 16384);
-
-    ASSERT((IOU_BASE + params.sq_off.head)         == (void*)IOU_S_HEAD);
-    ASSERT((IOU_BASE + params.sq_off.tail)         == (void*)IOU_S_TAIL);
-    ASSERT((IOU_BASE + params.sq_off.ring_mask)    == (void*)IOU_S_MASK);
-    ASSERT((IOU_BASE + params.sq_off.ring_entries) == (void*)IOU_S_ENTRIES);
-    ASSERT((IOU_BASE + params.sq_off.flags)        == (void*)IOU_S_FLAGS);
-    ASSERT((IOU_BASE + params.sq_off.array)        == (void*)IOU_S_ARRAY);
-
-    ASSERT((IOU_BASE + params.cq_off.head)         == (void*)IOU_C_HEAD);
-    ASSERT((IOU_BASE + params.cq_off.tail)         == (void*)IOU_C_TAIL);
-    ASSERT((IOU_BASE + params.cq_off.ring_mask)    == (void*)IOU_C_MASK);
-    ASSERT((IOU_BASE + params.cq_off.ring_entries) == (void*)IOU_C_ENTRIES);
-    ASSERT((IOU_BASE + params.cq_off.cqes)         == (void*)IOU_C_CQES);
-
-    ASSERT(IOU_BASE_SIZE == sSize);
-
-    // DNS
-    dnsAnswersReadyN = 0;
-
-    foreach (i, DNS_SERVERS_N) {
-        const int sock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP);
-        if (sock <= 0)
-            fatal("FAILED TO OPEN DNS SOCKET");
-        if (bind(sock, (SockAddrAny*)&dnsBindAddr, sizeof(SockAddrIP4)))
-            fatal("FAILED TO BIND DNS SOCKET");
-        if (connect(sock, (SockAddrAny*)&dnsServers[i], sizeof(SockAddrIP4)))
-            fatal("FAILED TO CONNECT DNS SOCKET");
-        dnsSockets[i] = sock;
-    }
-
-    // PROXIES
-    proxiesN = 0;
-
-    foreach (i, PROXIES_ROOTS_N)
-        proxiesRoots[i] = PROXY_NONE;
-
-    foreach (i, PROXIES_N) {
-        proxies[i].ip        = 0;
-        proxies[i].port      = 0;
-        proxies[i].protocol  = 0;
-        proxies[i].childs[0] = PROXY_NONE;
-        proxies[i].childs[1] = PROXY_NONE;
-        proxies[i].childs[2] = PROXY_NONE;
-        proxies[i].childs[3] = PROXY_NONE;
-    }
-
-    // HOSTS
-    hostsN = 0;
-
-    clear(hosts, sizeof(hosts));
-    clear1(hostsRoots, sizeof(hostsRoots));
+    xweb_io_init();
+    xweb_dns_init();
+    xweb_proxies_init();
+    xweb_hosts_init();
 
     // INITIALIZE THE SSL LIBRARY
     wolfSSL_Init();
