@@ -1,3 +1,15 @@
+static inline void xweb_conn_out (Conn* const conn, Out* const out) {
+
+    ASSERT(out);
+    ASSERT(out->size);
+
+    if (conn->out_) // SE TEM UM ÚLTIMO, APONTA ELE PARA ESTE
+        (conn->out_)->next = out;
+    else // SE NÃO TEM UM ÚLTIMO, ENTÃO TAMBÉM NÃO TEM UM PRIMEIRO
+        conn->out = out;
+    conn->out_ = out; // SEMPRE É O ÚLTIMO
+}
+
 static inline void xweb_conn_proxy_good (const Conn* const conn) {
     if (conn->proxy != PROXY_NONE)
         if (conn->pool->site->proxiesPoints[conn->proxy])
