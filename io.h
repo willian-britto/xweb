@@ -1,3 +1,4 @@
+typedef struct IOSubmission IOSubmission;
 
 struct IOSubmission {
     u64 data;
