@@ -1,4 +1,58 @@
 
+void xweb_exit (void) {
+
+    log("EXITING");
+
+    foreach (i, DNS_SERVERS_N)
+        close(dnsSockets[i]);
+
+    const Conn* conn = conns;
+
+    // TODO: FIXME: CANCELAR TUDO
+    while (conn) {
+        if (conn->fd)
+            close(conn->fd);
+        conn = conn->next;
+    }
+
+    //
+    while (uConsumePending) {
+        dbg("WAITING %u EVENTS", uConsumePending);
+        sched_yield();
+        uint head = *IOU_C_HEAD;
+        loop {
+            read_barrier();
+            if (head == *IOU_C_TAIL)
+                break;
+            uConsumePending--;
+            head++;
+        }
+        *IOU_C_HEAD = head;
+        write_barrier(); // TODO: FIXME:
+        break;
+    }
+
+    // TODO: FIXME: CUIDADO COM OS OBJETOS :S
+    if (munmap(IOU_S_SQES, IOU_S_SQES_SIZE))
+        fatal("FAILED TO UNMAP IOU_S_SQES");
+    if (munmap(IOU_BASE, IOU_BASE_SIZE))
+        fatal("FAILED TO UNMAP IOU_BASE");
+    if (close(IOU_FD))
+        fatal("FAILED TO CLOSE IOU_FD");
+
+    // NOTE: WE CANNOT TOUCH ANYMORE:
+        // IO_URING
+        // dnsSockets[i]
+        // EACH CONN->FD
+
+#if XWEB_TEST // RESTORE THE ECHO
+    struct termios termios;
+    tcgetattr(STDIN_FILENO, &termios);
+    termios.c_lflag |= ECHO;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &termios);
+#endif
+}
+
 void xweb_init1 (const u64 id) {
 
     dbg("RUNNING AS PROCESS ID %llu", (uintll)id);
