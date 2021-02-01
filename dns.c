@@ -1,3 +1,11 @@
+#if DNS_RESOLVE_RETRY_INTERVAL_MIN >= DNS_RESOLVE_RETRY_INTERVAL_MAX
+#error
+#endif
+
+#if DNS_RESOLVE_SUCCESS_INTERVAL_MIN >= DNS_RESOLVE_SUCCESS_INTERVAL_MAX
+#error
+#endif
+
 // TODO: FIXME: USAR OS SERVIDORES DNS IPV6
 static const SockAddrIP4 dnsBindAddr = { .sin_family = AF_INET, .sin_port = 0, .sin_addr = { .s_addr = XWEB_RESOLVE_BIND_IP } };
 
