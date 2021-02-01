@@ -1,4 +1,8 @@
-static inline void xweb_conn_out (Conn* const conn, Out* const out) {
+
+static uint connsN;
+static Conn* conns;
+
+void xweb_conn_out (Conn* const conn, Out* const out) {
 
     ASSERT(out);
     ASSERT(out->size);
