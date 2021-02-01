@@ -1,4 +1,12 @@
 
+#define LOG_BUFFER_SIZE (2*1024*1024)
+
+static char* logBuffer;
+static char* logBufferReady;
+static char* logBufferFlushing;
+static char* logEnd;
+static uint logFree;
+
 static PyObject* xweb_PY_log_ (const char* const pre, uint preSize, const char* const msg, uint msgSize) {
 
     if (logFree < (msgSize + 8192)) {
