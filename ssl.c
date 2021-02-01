@@ -1,7 +1,12 @@
 
+static WOLFSSL_CTX* sslCtx;
 
+static uint sslInSize;
+static void* sslInStart;
+static uint sslOutFree;
+static void* sslOutEnd;
 
-void xquotes_web_init (void) {
+void xweb_ssl_init (void) {
 
     // INITIALIZE THE SSL LIBRARY
     wolfSSL_Init();
