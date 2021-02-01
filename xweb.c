@@ -138,30 +138,6 @@ static Thread* thread;
 static uint connsN;
 static Conn* conns;
 
-#define LOG_BUFFER_SIZE (2*1024*1024)
-
-static char* logBuffer;
-static char* logBufferReady;
-static char* logBufferFlushing;
-static char* logEnd;
-static uint logFree;
-
-#define PROXIES_ROOTS_N 512
-#define PROXIES_ROOTS_BITS 9
-#define PROXIES_ROOTS_MASK 0b111111111ULL
-
-static uint  proxiesN;
-static u16   proxiesRoots[PROXIES_ROOTS_N];
-static Proxy proxies[PROXIES_N];
-
-#define HOST_NONE     0xFFFF // TEM QUE SER TODOS OS BITS 1 NO hostsRoots[]
-#define HOSTS_N       0xFFFF
-#define HOSTS_ROOTS_N 512
-
-static uint  hostsN;
-static u16   hostsRoots[HOSTS_ROOTS_N];
-static Host* hosts[HOSTS_N];
-
 #define USER_AGENTS_N 4
 
 static char* userAgents[] = {
