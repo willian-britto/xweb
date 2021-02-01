@@ -1,3 +1,10 @@
+#define HOST_NONE     0xFFFF // TEM QUE SER TODOS OS BITS 1 NO hostsRoots[]
+#define HOSTS_N       0xFFFF
+#define HOSTS_ROOTS_N 512
+
+static uint  hostsN;
+static u16   hostsRoots[HOSTS_ROOTS_N];
+static Host* hosts[HOSTS_N];
 
 Host* xweb_host_new (const uint id, const u64 hash, const char* const name, const uint nameSize) {
 
