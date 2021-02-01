@@ -271,30 +271,7 @@ static void xweb_poll_io (void) {
     write_barrier();
 }
 
-static inline void xweb_io_submit (u32* const data, const uint opcode, const uint fd, const u64 addr, const u64 off, const uint len) {
 
-    uSubmissions[uSubmissionsEnd].data   = (u64)data;
-    uSubmissions[uSubmissionsEnd].opcode = opcode;
-    uSubmissions[uSubmissionsEnd].fd     = fd;
-    uSubmissions[uSubmissionsEnd].addr   = addr;
-    uSubmissions[uSubmissionsEnd].off    = off;
-    uSubmissions[uSubmissionsEnd].len    = len;
-
-    // TODO: FIXME: SETAR O ->result como IO_WAIT SOMENTE QUANDO ELE FOR SUBMETIDO?
-    //ou entao o if()else e so colocar no enqueued quando lotar o principal
-
-    //se tiverr algo enqueued ou nao couber mais->enqueuea
-
-    uSubmissionsEnd++;
-}
-
-// AO TENTAR CANCELAR ALGO:
-//primeiro procurar ele na lista dos queueds
-    // se o sslInRes || sslOutRes for IO_WAIT
-        // cancelar todos os queueds pelo FD
-    //cancela o &conn->sslInRes
-    //cancela o &conn->sslOutRes
-//se não achar, aí sim cancela no io_uring
 
 // PUXA O ENCRIPTADO DO sslIn, E PASSA PARA O WOLFSSL
 static int xweb_ssl_read (void* const restrict ign __unused, void* const restrict buff, uint size, void* const restrict ign2 __unused) {
@@ -571,61 +548,6 @@ static PyObject* xweb_PY_proxy_add (const char* const ip_, const uint port, cons
     xweb_proxy_add(ip_, port, protocol);
 
     return None;
-}
-
-// CLEANUP BEFORE EXITING
-static inline void xweb_exit (void) {
-
-    log("EXITING");
-
-    foreach (i, DNS_SERVERS_N)
-        close(dnsSockets[i]);
-
-    const Conn* conn = conns;
-
-    // TODO: FIXME: CANCELAR TUDO
-    while (conn) {
-        if (conn->fd)
-            close(conn->fd);
-        conn = conn->next;
-    }
-
-    //
-    while (uConsumePending) {
-        dbg("WAITING %u EVENTS", uConsumePending);
-        sched_yield();
-        uint head = *IOU_C_HEAD;
-        loop {
-            read_barrier();
-            if (head == *IOU_C_TAIL)
-                break;
-            uConsumePending--;
-            head++;
-        }
-        *IOU_C_HEAD = head;
-        write_barrier(); // TODO: FIXME:
-        break;
-    }
-
-    // TODO: FIXME: CUIDADO COM OS OBJETOS :S
-    if (munmap(IOU_S_SQES, IOU_S_SQES_SIZE))
-        fatal("FAILED TO UNMAP IOU_S_SQES");
-    if (munmap(IOU_BASE, IOU_BASE_SIZE))
-        fatal("FAILED TO UNMAP IOU_BASE");
-    if (close(IOU_FD))
-        fatal("FAILED TO CLOSE IOU_FD");
-
-    // NOTE: WE CANNOT TOUCH ANYMORE:
-        // IO_URING
-        // dnsSockets[i]
-        // EACH CONN->FD
-
-#if XWEB_TEST // RESTORE THE ECHO
-    struct termios termios;
-    tcgetattr(STDIN_FILENO, &termios);
-    termios.c_lflag |= ECHO;
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &termios);
-#endif
 }
 
 #if XWEB_TEST
