@@ -18,3 +18,15 @@ int xweb_is_ip_valid_4 (const uint ip) {
         (ip & IP4(240,0,0,0)) != IP4(224,0,0,0)
     );
 }
+
+static inline u64 rdtsc (void) {
+    uint lo;
+    uint hi;
+    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    return ((u64)hi << 32) | lo;
+}
+
+static inline u64 random64 (const u64 seed) {
+
+    return seed + rdtsc() + random();
+}

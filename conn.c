@@ -2,6 +2,211 @@
 static uint connsN;
 static Conn* conns;
 
+
+// INFORMA O TAMANHO E JÁ TENTA CONSUMIR
+// VAI DESCONTANDO DO ->exactSize E COLOCANDO NO ->exactEnd
+static PyObject* xweb_PY_conn_http_recv_body_eof (void) {
+
+    return None;
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_eof_start (void) {
+
+    return xweb_PY_conn_http_recv_body_eof();
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_sized (void) {
+
+    return xweb_PY_conn_recv_sized();
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_sized_start (const uint size) {
+
+    return xweb_PY_conn_recv_sized_start(size);
+}
+
+static PyObject* xweb_PY_conn_http_recv_header (void) {
+
+    Conn* const conn = thread->conn;
+
+    while (conn->in) {
+
+        const uint inSize = conn->in->end - conn->in->start;
+
+        // SÓ VERIFICA SE JÁ FOR GRANDE, OU NO CAO DE SER PEQUENO MAS NÃO TER MAIS NADA
+        if (inSize >= 128 || conn->in->next == NULL) {
+
+            void* const end = memmem(conn->in->start, inSize, "\r\n\r\n", 4);
+
+            if (end) { // FOUND
+                if (memcmp(conn->in->start, "HTTP/1.0", 8) &&
+                    memcmp(conn->in->start, "HTTP/1.1", 8)) {
+                    conn->poll = CONN_POLL_CLOSE;
+                    return Err; // BAD HEADER START
+                }
+
+                const uint size = end - conn->in->start;
+
+                void* const buff = malloc(size);
+
+                memcpy(buff, conn->in->start, size);
+                conn->in->start += size + 4;
+
+                thread->msg->ob_bytes = buff;
+                thread->msg->ob_start = buff;
+                thread->msg->ob_alloc = size;
+
+                Py_REFCNT(thread->msg) = 2;
+                return (PyObject*)thread->msg;
+            }
+
+            if (inSize >= 4096) {
+                conn->poll = CONN_POLL_CLOSE;
+                return Err; // THE HEADER IS TOO BIG
+            }
+        }
+
+        if (conn->in->next == NULL)
+            break;
+
+        memcpy((conn->in->next->start -= inSize), conn->in->start, inSize);
+
+        xweb_conn_in_consumed(conn);
+    }
+
+    if (conn->poll)
+        return None;
+
+    return Err;
+}
+
+// TODO: FIXME: NÃO É DO TIPO CONSUME, ENTÃO ELA MESMA DÁ O IN()
+static PyObject* xweb_conn_http_recv_header_start_PY (void) {
+
+    return xweb_PY_conn_http_recv_header();
+}
+
+// NOTE: NÃO ESTÁ SUPORTANDO O TRAILER
+static PyObject* xweb_conn_http_recv_body_chunked_PY (void) {
+#if 0
+    ASSERT(conn->msgLmt >= 64);
+    ASSERT(conn->msgLmt <= IN_SIZE_MAX);
+    ASSERT(conn->msgSkip < conn->msgLmt);
+
+    if (conn->msgIn == NULL) {
+        if (conn->in == NULL) {
+            if (conn->poll)
+                return None;
+            return Err;
+        } // FINALMENTE INICIALIZA
+        conn->msgIn = conn->in;
+        conn->msgInStart = conn->in->start;
+    }
+
+    loop {
+
+        ASSERT(conn->in);
+        ASSERT(conn->in->start <= conn->in->end);
+        ASSERT(conn->in->start >= ((char*)conn->in + sizeof(In)));
+        ASSERT(conn->in->start <= ((char*)conn->in + sizeof(In) + IN_SIZE_MAX));
+        ASSERT(conn->in_);
+        ASSERT(conn->msgIn);
+        ASSERT(conn->msgInStart >= conn->in->start);
+        ASSERT(conn->msgInStart <= conn->in->end);
+
+        if (conn->msgInStart == conn->msgIn->end) {
+            // CHEGOU NO FIM DESTE IN
+            if (conn->msgIn->next == NULL) {
+                if (conn->poll)
+                    return None;
+                return Err;
+            }
+            conn->msgIn = conn->msgIn->next;
+            conn->msgInStart = conn->msgIn->start;
+            continue;
+        }
+
+        const uint TEM = conn->msgIn->end - conn->msgInStart;
+
+        if (conn->msgSkip) {
+            // AINDA ESTÁ SKIPPANDO UM CHUNK
+            uint size = conn->msgSkip;
+            if (size > TEM)
+                size = TEM;
+            conn->msgSkip -= size;
+            conn->msgInStart += size;
+            continue;
+        }
+
+        // ESTÁ NA HORA DE LER UM CHUNK SIZE
+        if (TEM <= 8) {
+            if (conn->msgIn->next) {
+                *(u64*)(conn->msgIn->next->start - 8) =
+                *(u64*)(conn->msgIn->end - 8);
+                conn->msgIn->next->start -= TEM; // COLOCOU NO NEXT
+                conn->msgIn->end -= TEM; // RETIROU DESTE
+                continue; // PODE AINDA SER PEQUENO; ALÉM DISSO, PRECISA ATUALIZAR NOVAMENTE O TEM
+            }
+        }
+
+        //
+        char* ptr = conn->msgInStart; uint count = 0; uint chunkSize = 0; uint chr;
+
+        while ((chr = *ptr++) != '\r') {
+            if (count++ == 7)
+                return Err;
+            if ((chr -= ((chr <= '9') ? '0': (chr <= 'F') ? 'A' - 10: 'a' - 10)) > 0xFU)
+                return Err;
+            chunkSize <<= 4;
+            chunkSize |= chr;
+        }
+
+        if (count == 0)
+            return Err; // NÃO LEU NENHUM NIBBLE
+
+        if (ptr > conn->msgIn->end) {
+            if (conn->poll)
+                return None;
+            return Err;
+        }
+
+        // CONSEGUIU LER
+
+        if (chunkSize == 0)  {
+            // TERMINOU
+
+            PyByteArrayObject* const body = (PyByteArrayObject*)PyByteArray_FromStringAndSize("", 1);
+
+            PyObject_Free(body->ob_bytes);
+
+            body->ob_bytes = PyObject_Malloc(conn->msgSkip);
+            body->ob_start = body->ob_bytes;
+            body->ob_alloc = conn->msgSkip;
+
+            // AGORA COPIA TODOS
+            // E VAI DANDO FREE NELES
+
+            conn->msgLmt    = 0;
+            conn->msgSkip   = 0;
+            conn->msgIn     = NULL;
+            conn->msgInStart = NULL;
+
+            return (PyObject*)body;
+        }
+
+        // AINDA NÃO TERMINOU
+        if (conn->msgLmt <= chunkSize)
+            return Err; // É MUITO GRANDE
+
+        conn->msgLmt -= chunkSize;
+        conn->msgSkip = chunkSize + 1; // TAMBÉM IGNORA O \n
+        conn->msgInStart = ptr;
+    }
+#endif
+    return None;
+}
+
+
 void xweb_conn_out (Conn* const conn, Out* const out) {
 
     ASSERT(out);
@@ -24,6 +229,90 @@ static inline void xweb_conn_proxy_bad (const Conn* const conn) {
     if (conn->proxy != PROXY_NONE)
         if (conn->pool->site->proxiesPoints[conn->proxy] != PROXY_POINTS_MAX)
             conn->pool->site->proxiesPoints[conn->proxy]++;
+}
+
+// RETIRA ELE E PEGA O PRÓXIMO
+static inline void xweb_conn_in_consumed (Conn* const conn) {
+
+    In* const next = conn->in->next;
+
+    free(conn->in);
+
+    if (!(conn->in = next))
+        conn->in_ = NULL;
+}
+
+static inline void xweb_out_free (Out* const out) {
+
+    if (out->type == OUT_TYPE_DYNAMIC)
+        free(*(void**)out->buff);
+    elif (out->type == OUT_TYPE_PYTHON)
+        Py_DECREF(*(PyObject**)out->buff);
+
+    free(out);
+}
+
+static Out* xweb_out_sized (const uint size) {
+
+    ASSERT(size);
+
+    Out* const out = malloc(sizeof(Out) + size);
+
+    out->next = NULL;
+    out->type = OUT_TYPE_SIZED;
+    out->size = size;
+    out->start = out->buff;
+
+    return out;
+}
+
+static Out* xweb_out_static (const void* const restrict buff, const uint size) {
+
+    ASSERT(buff);
+    ASSERT(size);
+
+    Out* const out = malloc(sizeof(Out));
+
+    out->next = NULL;
+    out->type = OUT_TYPE_STATIC;
+    out->size = size;
+    out->start = (void*)(uintptr_t)buff;
+
+    return out;
+}
+
+// CRIA E REGISTR UM OUT DE DADOS EMBUTIDOS DE TAL TAMANHO
+static void* xweb_conn_out_sized (Conn* const conn, const uint size) {
+
+    Out* const out = xweb_out_sized(size);
+
+    xweb_conn_out(conn, out);
+
+    return out->start;
+}
+
+static void xweb_conn_out_bytes (Conn* const conn, PyObject* const  obj) {
+
+    Out* const out = malloc(sizeof(Out) + sizeof(PyObject*));
+
+    out->next = NULL;
+    out->type = OUT_TYPE_PYTHON;
+    out->size = PY_BYTES_SIZE(obj);
+    out->start = PY_BYTES_VALUE(obj);
+
+    Py_INCREF((*(PyObject**)out->buff = obj));
+
+    xweb_conn_out(conn, out);
+}
+
+static PyObject* xweb_conn_send_bytes (PyObject* const bytes) {
+
+    if (!thread->conn->poll)
+        return Err;
+
+    xweb_conn_out_bytes(thread->conn, bytes);
+
+    return None;
 }
 
 static inline u64 xweb_pool_hash (const Host* const host, const uint port) {
@@ -124,7 +413,7 @@ static PyObject* xweb_PY_connect (void) {
     return None;
 }
 
-static PyObject* xweb_PY_connect_start (const char* const restrict hostname, const uint hostnameSize, const uint port, void* const restrict ssl, const uint proxyTries) {
+static void xweb_connect_start (const char* const restrict hostname, const uint hostnameSize, const uint port, void* const restrict ssl, const uint proxyTries) {
 
     Host* const host = xweb_host_lookup_new(hostname, hostnameSize);
 
@@ -742,7 +1031,7 @@ static void xweb_conn_poll (Conn* const conn) {
 
 // EXECUTA AS AÇÕES DE ACORDO COM O STATUS DE CADA CONEXÃO
 // ATÉ PORQUE NEM TODAS AS CONEXÕES ESTÃO EM UMA THREAD, ENTÃO TEM DE EXECUTR NO BACKGROUND
-static void xweb_poll_conns (void) {
+static void xweb_conns_poll (void) {
 
     Conn* conn = conns;
 
@@ -753,7 +1042,7 @@ static void xweb_poll_conns (void) {
     }
 }
 
-static void xweb_poll_conns_res (void) {
+static void xweb_conns_poll_res (void) {
 
     for (Conn* conn = conns; conn; conn = conn->next) {
 
@@ -819,4 +1108,292 @@ void xweb_conns_init (void) {
 
     connsN = 0;
     conns = NULL;
+}
+
+
+
+// INFORMA O TAMANHO E JÁ TENTA CONSUMIR
+// VAI DESCONTANDO DO ->exactSize E COLOCANDO NO ->exactEnd
+static PyObject* xweb_PY_conn_http_recv_body_eof (void) {
+
+    return None;
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_eof_start (void) {
+
+    return xweb_PY_conn_http_recv_body_eof();
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_sized (void) {
+
+    return xweb_PY_conn_recv_sized();
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_sized_start (const uint size) {
+
+    return xweb_PY_conn_recv_sized_start(size);
+}
+
+static PyObject* xweb_PY_connect_start (const char* const restrict hostname, const uint hostnameSize, const uint port, void* const restrict ssl, const uint proxyTries) {
+
+    xweb_connect_start(hostname, hostnameSize, port, ssl, proxyTries);
+
+    return None;
+}
+
+static PyObject* xweb_PY_conn_send_bytes (PyObject* const bytes) {
+
+    return xweb_conn_send_bytes(bytes);
+}
+
+// TODO: FIXME: CADA CONEXÃO COM UM BUFFER PRÓPRIO DE MSG? TERIA DE LIDAR COM O REFCOUNT; AO DELETAR A CONEXÃO *TENTAR* SE LIVRAR DO BUFFER, BASTANDO DESCONTAR O REF COUNT
+
+// É DO TIPO CONSUME ONCE, ENTÃO LÊ DO FD TODA VEZ QUE FOR CHAMADA
+// ESTÁ LENDO UMA MENSAGEM DE TAMANHO ESPECÍFICO
+// NOTA: PARA TER CHEGADO AQUI, JA SABE QUE CHEGOU A CONECTAR E NAO CHEGOU A DESCONECTAR
+
+static PyObject* xweb_PY_conn_recv_sized (void) {
+#if 0
+    ASSERT(conn->poll);                // POS ESSE TIPO DE FUNCAO LE DIRETO; NAO TEM BUFFERS
+    ASSERT(!conn->in); // JA CONSUMIU TODOS NA FUNCAO START
+    ASSERT(conn->msgSize);      // A FUNCAO ASSUME QUE AINDA TEM ALGO A LER
+
+    dbg_conn("RECEIVE EXACT");
+
+    if (conn->read) {
+
+        const int size = xweb_conn_read(conn, MSGBUFF, conn->msgLmt);
+
+        if (size == -1) {
+            dbg_conn("RECEIVE EXACT - ERROR");
+            return Err;
+        }
+
+        if (size) {
+
+            MSGBUFF += size;
+            conn->msgLmt  -= size;
+
+            if (conn->msgLmt) {
+                dbg_conn("RECEIVE EXACT - INCOMPLETE");
+                return None;
+            }
+
+            dbg_conn("RECEIVE EXACT - COMPLETE");
+            return xweb_conn_msg_finished(conn);
+        }
+    }
+
+    if (conn->poll) {
+        dbg_conn("RECEIVE EXACT - WAIT");
+        return None;
+    }
+
+    dbg_conn("RECEIVE EXACT - CLOSED");
+    return Err;
+#endif
+    return None;
+}
+
+static PyObject* xweb_PY_conn_recv_sized_start (const uint size) {
+#if 0
+    dbg_conn("RECEIVE EXACT - START - SIZE %u", size);
+
+    ASSERT_CONN_NO_INPUT(conn);
+
+    if (size == 0) {
+        dbg_conn("RECEIVE EXACT - START - ZERO");
+        return Err;
+    }
+
+    if (size > 128*1024*1024) {
+        dbg_conn("RECEIVE EXACT - START - TOO BIG");
+        return Err;
+    }
+
+    conn->msgType    = 0;
+    conn->msgMore    = size;
+    conn->msgSkip    = 0;
+    conn->msgLmt     = size;
+    MSGBUFF    = PyObject_Malloc(size);
+    conn->msgIn      = NULL;
+    conn->msgInStart = NULL;
+
+    do {
+        if (conn->in == NULL) { // CONSUMIU TUDO O QUE JÁ TINHA, E AINDA ASSIM NÃO COMPLETOU
+            dbg_conn("RECEIVE EXACT - START - NOT IN CHUNKS");
+            return xweb_conn_recv_sized(); // TENTA DAR UM READ E CONSUMIR O RESTANTE
+        }
+
+        uint size = conn->in->size;
+
+        if (size == 0) {
+            In* const next = conn->in->next;
+            free(conn->in);
+            if ((conn->in = next) == NULL)
+                conn->in_ = NULL;
+            continue;
+        }
+
+        if (size > conn->msgLmt)
+            size = conn->msgLmt;
+
+        memcpy(MSGBUFF, conn->in->start, size);
+
+        conn->in->start += size;
+
+        MSGBUFF += size;
+        conn->msgLmt  -= size;
+
+    } while (conn->msgLmt);
+
+    dbg_conn("RECEIVE EXACT - START - DONE (ALREADY IN CHUNKS)");
+
+    return xweb_conn_msg_finished(conn);
+#endif
+    (void)size; return None;
+}
+
+// INFORMA O TAMANHO E JÁ TENTA CONSUMIR
+// VAI DESCONTANDO DO ->exactSize E COLOCANDO NO ->exactEnd
+static PyObject* xweb_PY_conn_http_recv_body_eof (void) {
+
+    return None;
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_eof_start (void) {
+
+    return xweb_PY_conn_http_recv_body_eof();
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_sized (void) {
+
+    return xweb_PY_conn_recv_sized();
+}
+
+static PyObject* xweb_PY_conn_http_recv_body_sized_start (const uint size) {
+
+    return xweb_PY_conn_recv_sized_start(size);
+}
+
+static PyObject* xweb_PY_conn_http_recv_header (void) {
+
+    Conn* const conn = thread->conn;
+
+    while (conn->in) {
+
+        const uint inSize = conn->in->end - conn->in->start;
+
+        // SÓ VERIFICA SE JÁ FOR GRANDE, OU NO CAO DE SER PEQUENO MAS NÃO TER MAIS NADA
+        if (inSize >= 128 || conn->in->next == NULL) {
+
+            void* const end = memmem(conn->in->start, inSize, "\r\n\r\n", 4);
+
+            if (end) { // FOUND
+                if (memcmp(conn->in->start, "HTTP/1.0", 8) &&
+                    memcmp(conn->in->start, "HTTP/1.1", 8)) {
+                    conn->poll = CONN_POLL_CLOSE;
+                    return Err; // BAD HEADER START
+                }
+
+                const uint size = end - conn->in->start;
+
+                void* const buff = malloc(size);
+
+                memcpy(buff, conn->in->start, size);
+                conn->in->start += size + 4;
+
+                thread->msg->ob_bytes = buff;
+                thread->msg->ob_start = buff;
+                thread->msg->ob_alloc = size;
+
+                Py_REFCNT(thread->msg) = 2;
+                return (PyObject*)thread->msg;
+            }
+
+            if (inSize >= 4096) {
+                conn->poll = CONN_POLL_CLOSE;
+                return Err; // THE HEADER IS TOO BIG
+            }
+        }
+
+        if (conn->in->next == NULL)
+            break;
+
+        memcpy((conn->in->next->start -= inSize), conn->in->start, inSize);
+
+        xweb_conn_in_consumed(conn);
+    }
+
+    if (conn->poll)
+        return None;
+
+    return Err;
+}
+
+// TODO: FIXME: NÃO É DO TIPO CONSUME, ENTÃO ELA MESMA DÁ O IN()
+static PyObject* xweb_PY_conn_http_recv_header_start (void) {
+
+    return xweb_PY_conn_http_recv_header();
+}
+
+static PyObject* xweb_PY_conn_http_recv_header (void) {
+
+    Conn* const conn = thread->conn;
+
+    while (conn->in) {
+
+        const uint inSize = conn->in->end - conn->in->start;
+
+        // SÓ VERIFICA SE JÁ FOR GRANDE, OU NO CAO DE SER PEQUENO MAS NÃO TER MAIS NADA
+        if (inSize >= 128 || conn->in->next == NULL) {
+
+            void* const end = memmem(conn->in->start, inSize, "\r\n\r\n", 4);
+
+            if (end) { // FOUND
+                if (memcmp(conn->in->start, "HTTP/1.0", 8) &&
+                    memcmp(conn->in->start, "HTTP/1.1", 8)) {
+                    conn->poll = CONN_POLL_CLOSE;
+                    return Err; // BAD HEADER START
+                }
+
+                const uint size = end - conn->in->start;
+
+                void* const buff = malloc(size);
+
+                memcpy(buff, conn->in->start, size);
+                conn->in->start += size + 4;
+
+                thread->msg->ob_bytes = buff;
+                thread->msg->ob_start = buff;
+                thread->msg->ob_alloc = size;
+
+                Py_REFCNT(thread->msg) = 2;
+                return (PyObject*)thread->msg;
+            }
+
+            if (inSize >= 4096) {
+                conn->poll = CONN_POLL_CLOSE;
+                return Err; // THE HEADER IS TOO BIG
+            }
+        }
+
+        if (conn->in->next == NULL)
+            break;
+
+        memcpy((conn->in->next->start -= inSize), conn->in->start, inSize);
+
+        xweb_conn_in_consumed(conn);
+    }
+
+    if (conn->poll)
+        return None;
+
+    return Err;
+}
+
+// TODO: FIXME: NÃO É DO TIPO CONSUME, ENTÃO ELA MESMA DÁ O IN()
+PyObject* xweb_conn_http_recv_header_start_PY (void) {
+
+    return xweb_PY_conn_http_recv_header();
 }

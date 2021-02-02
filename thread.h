@@ -1,4 +1,8 @@
 
+#define SESSION_POOLS_ROOTS_N 64
+#define SESSION_POOLS_ROOTS_MASK 0b111111ULL
+#define SESSION_POOLS_ROOTS_BITS 6
+
 typedef struct Thread Thread;
 
 struct Thread {

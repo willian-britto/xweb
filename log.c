@@ -7,7 +7,7 @@ static char* logBufferFlushing;
 static char* logEnd;
 static uint logFree;
 
-static PyObject* xweb_PY_log_ (const char* const pre, uint preSize, const char* const msg, uint msgSize) {
+void xweb_log (const char* const pre, uint preSize, const char* const msg, uint msgSize) {
 
     if (logFree < (msgSize + 8192)) {
         logFree = LOG_BUFFER_SIZE;
@@ -49,7 +49,25 @@ static PyObject* xweb_PY_log_ (const char* const pre, uint preSize, const char* 
     logEnd = logBuffer;
     logFree = LOG_BUFFER_SIZE;
 #endif
+}
+
+static PyObject* xweb_log_PY (const char* const pre, uint preSize, const char* const msg, uint msgSize) {
+
+    xweb_log(pre, preSize, msg, msgSize);
+
     return None;
+}
+
+static void xweb_log_poll (void) {
+
+    if (logEnd != logBuffer && logBufferReady) {
+        logBufferFlushing = logBuffer;
+        xweb_io_submit((u32*)&logBufferFlushing, IORING_OP_WRITE, STDOUT_FILENO, (u64)logBuffer, 0, logEnd - logBuffer);
+        logBuffer = logBufferReady;
+        logEnd = logBuffer;
+        logFree = LOG_BUFFER_SIZE;
+        logBufferReady = NULL;
+    }
 }
 
 void xweb_log_init (void) {

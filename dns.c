@@ -45,7 +45,7 @@ static u16 dnsAnswersReady[DNS_ANSWERS_N];
 static DNSAnswer dnsAnswers[DNS_ANSWERS_N];
 
 // TODO: FIXME: salvar este novo NOW absoluto, e calcular o calendar atual
-static inline void xweb_poll_dns_receive_cname (Host* const restrict host, const u8* pkt, const u8* data, uint dataSize) {
+static inline void xweb_dns_poll_receive_cname (Host* const restrict host, const u8* pkt, const u8* data, uint dataSize) {
 
     dbg("GOT CNAME FOR HOST %s", host->name);
 
@@ -82,7 +82,7 @@ static inline void xweb_poll_dns_receive_cname (Host* const restrict host, const
 
 // ORIGINAL ENCODED
 // TODO: FIXME: SIMPLESMENTE COMPARAR COM UM HASH
-static inline int xweb_poll_dns_receive_handle_is_encoded_mismatch (const u8* restrict a, const u8* restrict b) {
+static inline int xweb_dns_poll_receive_handle_is_encoded_mismatch (const u8* restrict a, const u8* restrict b) {
     b++; // TODO: FIXME: PODERIA VERIFICAR ISTO SOMANDO ESTE COMEÇO COM TODOS OS OUTROS '.', E A CADA PONTO ADICIONAR +1
     loop { //
         const uint A = *a++;
@@ -95,7 +95,7 @@ static inline int xweb_poll_dns_receive_handle_is_encoded_mismatch (const u8* re
 }
 
 // TODO: FIXME: NXDOMAIN WITH A SPECIFIC RETRY INTERVAL
-static inline void xweb_poll_dns_receive_handle (const uint server, const u8* pkt, const u8* const end) {
+static inline void xweb_dns_poll_receive_handle (const uint server, const u8* pkt, const u8* const end) {
 
     uint v6;
     const uint hostID = _from_be16(*(u16*)pkt);
@@ -125,7 +125,7 @@ static inline void xweb_poll_dns_receive_handle (const uint server, const u8* pk
     pos += 10; // FLAGS, QUESTIONS, ANSWERSRRS, AUTHORITYRRS, ADITIONALRRS
 
     // TODO: FIXME: SE SÓ TEM UM JEITO DE ENCODAR, ENTÃO JÁ DEIXAR ENCODADO :S
-    if (xweb_poll_dns_receive_handle_is_encoded_mismatch((u8*)host->name, pos)) {
+    if (xweb_dns_poll_receive_handle_is_encoded_mismatch((u8*)host->name, pos)) {
         dbg("HANDLE DNS ANSWER - PKT - NAME MISMATCH");
         return; // NAME MISMATCH
     }
@@ -170,7 +170,7 @@ static inline void xweb_poll_dns_receive_handle (const uint server, const u8* pk
             if (xweb_is_ip_valid_6((u64*)pos))
                 xweb_host_ips_add_6(host, (u64*)pos);
         } elif (type == 0x0500 && 4 <= size && size <= HOST_NAME_SIZE_MAX) // CNAME
-            xweb_poll_dns_receive_cname(host, pkt, pos, size);
+            xweb_dns_poll_receive_cname(host, pkt, pos, size);
         pos += size; // PULA O DATA
     }
 
@@ -179,7 +179,7 @@ static inline void xweb_poll_dns_receive_handle (const uint server, const u8* pk
     dbg("HANDLE DNS ANSWER - PKT - RESOLVE SUCCESS HOST %s V%c AGAIN IN %lld", host->name, v6?'6':'4', (intll)host->agains[server][v6] - (intll)now);
 }
 
-static void xweb_poll_dns_receive (void) {
+static void xweb_dns_poll_receive (void) {
 
     while (dnsAnswersReadyN) {
 
@@ -187,7 +187,7 @@ static void xweb_poll_dns_receive (void) {
 
         if (answer->result >= 24 &&
             answer->result <= 2048)
-            xweb_poll_dns_receive_handle(answer->server, answer->pkt, answer->pkt + answer->result);
+            xweb_dns_poll_receive_handle(answer->server, answer->pkt, answer->pkt + answer->result);
 
         answer->result = IO_WAIT;
 
@@ -195,7 +195,7 @@ static void xweb_poll_dns_receive (void) {
     }
 }
 
-static void xweb_poll_dns_send (void) {
+static void xweb_dns_poll_send (void) {
 
     // LIMITAR QUANTOS SÃO ENVIADOS DE CADA VEZ
     // NÃO MANDA O V4 E V6 AO MESMO TEMPO, PARA O CASO DE TER PROBLEMAS NA REDE ETC
@@ -218,8 +218,24 @@ static void xweb_poll_dns_send (void) {
     }
 }
 
+void xweb_dns_init2 (void) {
+
+    // DNS
+    // TODOS DEVEM SER SUBMETIDOS
+    // DIVIDIDO ENTRE OS SERVIDORES
+    DNSAnswer* answer = dnsAnswers;
+
+    foreach (server, DNS_SERVERS_N)
+        foreach (count, DNS_SERVER_ANSWERS_N) {
+            answer->result = IO_ERR;
+            answer->server = server;
+            xweb_io_submit(&answer->result, IORING_OP_READ, dnsSockets[server], (u64)answer->pkt, 0, sizeof(answer->pkt));
+            answer++;
+        }
+}
+
 void xweb_dns_init (void) {
-   
+
     // DNS
     dnsAnswersReadyN = 0;
 

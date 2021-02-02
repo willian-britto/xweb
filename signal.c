@@ -24,3 +24,24 @@ static void xweb_signal_handler (int signal) {
             sigTERM = 1;
     }
 }
+
+void xweb_signal_init2 (void) {
+
+    // IGNORE ALL SIGNALS
+    struct sigaction action = { 0 };
+
+    action.sa_restorer = NULL;
+    action.sa_flags = 0;
+    action.sa_handler = SIG_IGN;
+
+    for (int sig = 0; sig != NSIG; sig++)
+        sigaction(sig, &action, NULL);
+
+    // HANDLE ONLY THESE
+    action.sa_handler = xweb_signal_handler;
+
+    sigaction(SIGINT,  &action, NULL);
+    sigaction(SIGTERM, &action, NULL);
+    sigaction(SIGUSR1, &action, NULL);
+    sigaction(SIGUSR2, &action, NULL);
+}

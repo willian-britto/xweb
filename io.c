@@ -56,7 +56,7 @@ void xweb_io_submit (u32* const data, const uint opcode, const uint fd, const u6
 }
 
 void xweb_io_init2 (void) {
-  
+
     if (mmap(IOU_S_SQES, IOU_S_SQES_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, IOU_FD, IORING_OFF_SQES) != IOU_S_SQES)
         fatal("FAILED TO MAP IOU_S_SQES");
 
@@ -71,11 +71,98 @@ void xweb_io_init2 (void) {
 
     uConsumeHead = *IOU_C_HEAD;
 
-    read_barrier();  
+    read_barrier();
+}
+
+static void xweb_io_poll (void) {
+
+    u64 q = uSubmissionsEnd - uSubmissionsStart;
+
+    // MAS LIMITADO A QUANTOS TEM FREE
+    if (q > (65536 - uSubmissionsNew))
+        q = (65536 - uSubmissionsNew);
+
+    //
+    uSubmissionsNew += q;
+
+    q += uSubmissionsStart;
+
+    //
+    uint tail = *IOU_S_TAIL; // TODO: FIXME: uSubmissionTail
+
+    read_barrier();
+
+    // COPIA DO START AO Q-ESIMO, PARA O KERNEL
+    while (uSubmissionsStart != q) { // ADD OUR SQ ENTRY TO THE TAIL OF THE SQE RING BUFFER
+
+        const IOSubmission* const uSubmission = &uSubmissions[uSubmissionsStart++ & 0xFFFFU];
+
+        if (uSubmission->fd) { const uint index = tail++ & IOU_S_MASK_CONST;
+
+            IOU_S_ARRAY[index] = index;
+
+            IOU_S_SQES[index].flags     = 0; // TODO: KEEP ALL MEMBERS OF THE STRUCTURE UP-TO-DATE
+            IOU_S_SQES[index].ioprio    = 0;
+            IOU_S_SQES[index].rw_flags  = 0;
+            IOU_S_SQES[index].opcode    = uSubmission->opcode;
+            IOU_S_SQES[index].fd        = uSubmission->fd;
+            IOU_S_SQES[index].off       = uSubmission->off;
+            IOU_S_SQES[index].addr      = uSubmission->addr;
+            IOU_S_SQES[index].len       = uSubmission->len;
+            IOU_S_SQES[index].user_data = uSubmission->data;
+
+        } else // SE ESTE TIVER SIDO CANCELADO, IGNORA E DESCONSIDERA
+            uSubmissionsNew--;
+    }
+
+    // UPDATE THE TAIL SO THE KERNEL CAN SEE IT
+    *IOU_S_TAIL = tail;
+
+    write_barrier();
+
+    // MANDA O KERNEL CONSUMIR O QUE JÁ FOI COLOCADO - TODO: FIXME: É PARA COLOCAR SÓ OS NOVOS OU TODOS MESMO?
+    // NOTE: ASSUMINDO QUE O JAMAIS TERA ERROS
+    uSubmissionsNew -= io_uring_enter(IOU_FD, uSubmissionsNew, 0, 0);
+
+    //ASSERT(uSubmissionsNew <= 65536);
+
+    //
+    sched_yield();
+#if XWEB_TEST
+    sleep(1);
+#endif
+
+    // LÊ TODO O CQ E SETA OS RESULTADOS
+    const uint uConsumeTail = *IOU_C_TAIL;
+
+    read_barrier();
+
+    while (uConsumeHead != uConsumeTail) {
+
+        const IOURingCQE* const cqe = &IOU_C_CQES[uConsumeHead++ & IOU_C_MASK_CONST];
+
+        u32* const result = (u32*)cqe->user_data;
+
+        // result = NULL -> É UM close(conn->fd), OU UM write(DNS)
+        if (result == (u32*)&logBufferFlushing) {
+            logBufferReady = logBufferFlushing;
+            logBufferFlushing = NULL;
+        } elif (result) { *result = cqe->res;
+            // NOTE: EXPECTING AN OVERFLOW HERE IF RESULT < dnsAnswers
+            const uint id = ((void*)result - (void*)dnsAnswers) / sizeof(DNSAnswer);
+
+            if (id < DNS_ANSWERS_N)
+                dnsAnswersReady[dnsAnswersReadyN++] = id;
+        }
+    }
+
+    *IOU_C_HEAD = uConsumeHead;
+
+    write_barrier();
 }
 
 void xweb_io_init (void) {
-  
+
     // IO_URING
     IOURingParams params; memset(&params, 0, sizeof(params));
 

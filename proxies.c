@@ -51,7 +51,7 @@ static void xweb_proxy_add (const uint ip, const uint port, const uint protocol)
     }
 }
 
-void xweb_proxy_add (const char* const ip_, const uint port, const uint protocol) {
+void xweb_proxy_add_PY (const char* const ip_, const uint port, const uint protocol) {
 
     uint a = 0, b = 0, c = 0, d = 0;
 
@@ -62,10 +62,12 @@ void xweb_proxy_add (const char* const ip_, const uint port, const uint protocol
         if (xweb_is_ip_valid_4(ip) && 1 <= port && port <= 0xFFFF && protocol <= 2)
             xweb_proxy_add(ip, port, protocol);
     }
+
+    return None;
 }
 
 void xweb_proxies_init (void) {
-    
+
     // PROXIES
     proxiesN = 0;
 
